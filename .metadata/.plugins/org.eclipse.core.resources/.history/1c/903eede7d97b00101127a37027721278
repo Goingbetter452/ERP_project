@@ -1,0 +1,29 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="com.erp.dao.ProductDAO" %>
+<%@ page import="java.sql.SQLException" %>
+<%@ page import="java.util.logging.Level" %>
+<%@ page import="java.util.logging.Logger" %>
+
+<%!
+    private static final Logger LOGGER = Logger.getLogger("ProductDeleteLogger");
+%>
+
+<%
+    String pidStr = request.getParameter("pid");
+    
+    if (pidStr != null) {
+        try {
+            int pid = Integer.parseInt(pidStr);
+            ProductDAO productDAO = new ProductDAO();
+            productDAO.deleteProduct(pid);
+            response.sendRedirect("product_list.jsp?message=deleted");
+        } catch (NumberFormatException e) {
+            response.sendRedirect("product_list.jsp?error=invalid_id");
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Database error during product deletion", e);
+            response.sendRedirect("product_list.jsp?error=db_error");
+        }
+    } else {
+        response.sendRedirect("product_list.jsp");
+    }
+%>

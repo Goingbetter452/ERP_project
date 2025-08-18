@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Copy 2 elements to &apos;lib&apos;&#x0D;&#x0A;- Original project: &apos;JDBC_project&apos;&#x0D;&#x0A;- Destination element: &apos;lib&apos;&#x0D;&#x0A;- Original elements:&#x0D;&#x0A;     ojdbc8-21.9.0.0.jar&#x0D;&#x0A;     lombok.jar" description="Copy files" element1="lib/ojdbc8-21.9.0.0.jar" element2="lib/lombok.jar" files="2" flags="589830" folders="0" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyResources" stamp="1755152867794" target="/Shoppingmall_Company_ERP/src/main/webapp/WEB-INF/lib" units="0" version="1.0"/>
+</session>

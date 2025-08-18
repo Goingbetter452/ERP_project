@@ -1,0 +1,57 @@
+package com.erp.dao;
+
+import com.erp.model.User;
+import com.erp.util.DBUtil;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+public class UserDAO {
+
+    public void addUser(User user) throws SQLException {
+        String sql = "INSERT INTO USERS (USERNAME, PASSWORD, ROLE) VALUES (?, ?, ?)";
+        try (Connection conn = DBUtil.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, user.getUSERNAME());
+            pstmt.setString(2, user.getPASSWORD());
+            pstmt.setString(3, user.getROLE());
+            pstmt.executeUpdate();
+        }
+    }
+
+    public User getUserByUsername(String username) throws SQLException {
+        User user = null;
+        String sql = "SELECT * FROM USERS WHERE USERNAME = ?";
+        try (Connection conn = DBUtil.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, username);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    user = new User();
+                    user.setID(rs.getInt("ID"));
+                    user.setUSERNAME(rs.getString("USERNAME"));
+                    user.setPASSWORD(rs.getString("PASSWORD"));
+                    user.setROLE(rs.getString("ROLE"));
+                }
+            }
+        }
+        return user;
+    }
+    
+    public boolean validateUser(String username, String password) throws SQLException {
+        String sql = "SELECT * FROM USERS WHERE USERNAME = ? AND PASSWORD = ?";
+        try (Connection conn = DBUtil.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, username);
+            pstmt.setString(2, password);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+}

@@ -1,0 +1,46 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="com.erp.dao.UserDAO" %>
+<%@ page import="com.erp.model.User" %>
+<%@ page import="java.sql.SQLException" %>
+
+<%!
+    // Simple password hashing (in a real app, use a strong hashing library like BCrypt)
+    private String hashPassword(String password) {
+        return Integer.toString(password.hashCode());
+    }
+%>
+
+<%
+    request.setCharacterEncoding("UTF-8");
+
+    String username = request.getParameter("username");
+    String password = request.getParameter("password");
+    String role = request.getParameter("role");
+
+    if (username == null || password == null || role == null || username.trim().isEmpty() || password.trim().isEmpty()) {
+        response.sendRedirect("register.jsp?error=1"); // Redirect if fields are empty
+        return;
+    }
+
+    User user = new User();
+    user.setUSERNAME(username);
+    // In a real application, you MUST use a strong hashing algorithm like BCrypt.
+    // Storing plain text passwords or using hashCode is insecure.
+    user.setPASSWORD(password); // Storing as plain text as per initial setup, but this is NOT recommended.
+    user.setROLE(role);
+
+    UserDAO userDAO = new UserDAO();
+
+    try {
+        userDAO.addUser(user);
+        response.sendRedirect("login.jsp?registration=success");
+    } catch (SQLException e) {
+        // Check for unique constraint violation (username already exists)
+        if (e.getErrorCode() == 1) { // ORA-00001: unique constraint violated
+            response.sendRedirect("register.jsp?error=2"); // Username taken
+        } else {
+            e.printStackTrace();
+            response.sendRedirect("register.jsp?error=3"); // Other DB error
+        }
+    }
+%>

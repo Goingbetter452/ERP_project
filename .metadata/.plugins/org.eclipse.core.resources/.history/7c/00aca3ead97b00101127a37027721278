@@ -1,0 +1,73 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="com.erp.dao.ProductDAO" %>
+<%@ page import="com.erp.model.Product" %>
+<%@ page import="java.util.List" %>
+<%@ page import="java.sql.SQLException" %>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>상품 목록 - 상품관리 시스템</title>
+<link rel="stylesheet" type="text/css" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>상품 목록</h1>
+        <div class="menu">
+            <a href="index.jsp" class="btn">메인 페이지</a>
+            <a href="product_add.jsp" class="btn">상품 추가</a>
+        </div>
+        
+        <%
+            ProductDAO productDAO = new ProductDAO();
+            List<Product> products = null;
+            String errorMessage = null;
+            
+            try {
+                products = productDAO.getAllProducts();
+            } catch (SQLException e) {
+                errorMessage = "데이터베이스 오류가 발생했습니다: " + e.getMessage();
+            }
+        %>
+        
+        <div class="main-content">
+            <% if (errorMessage != null) { %>
+                <p class="error-message"><%= errorMessage %></p>
+            <% } else { %>
+                <% if (products != null && !products.isEmpty()) { %>
+                    <table class="product-table">
+                        <thead>
+                            <tr>
+                                <th>상품번호</th>
+                                <th>상품명</th>
+                                <th>가격</th>
+                                <th>재고</th>
+                                <th>관리</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% for (Product product : products) { %>
+                                <tr>
+                                    <td><%= product.getPid() %></td>
+                                    <td><%= product.getPname() %></td>
+                                    <td><%= String.format("%.0f", product.getPrice()) %>원</td>
+                                    <td><%= product.getStock() %>개</td>
+                                    <td>
+                                        <a href="product_edit.jsp?pid=<%= product.getPid() %>" class="btn-small">수정</a>
+                                        <a href="product_delete.jsp?pid=<%= product.getPid() %>" 
+                                           class="btn-small btn-danger" 
+                                           onclick="return confirm('정말 삭제하시겠습니까?')">삭제</a>
+                                    </td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                <% } else { %>
+                    <p>등록된 상품이 없습니다.</p>
+                    <a href="product_add.jsp" class="btn">첫 번째 상품 추가하기</a>
+                <% } %>
+            <% } %>
+        </div>
+    </div>
+</body>
+</html>

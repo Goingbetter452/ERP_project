@@ -1,0 +1,20 @@
+package com.erp.util;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DBUtil {
+    private static final String DB_URL = "jdbc:oracle:thin:@1.220.247.78:1522/orcl"; // Updated database URL
+    private static final String DB_USER = "project2_2504_team3"; // Updated database username
+    private static final String DB_PASSWORD = "1234"; // Updated database password
+
+    public static Connection getConnection() throws SQLException {
+        try {
+            Class.forName("oracle.jdbc.OracleDriver");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        return DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+    }
+}

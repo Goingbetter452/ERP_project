@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<web-app version="6.0" xmlns="https://jakarta.ee/xml/ns/jakartaee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee                       https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd">
+
+  <!-- ======================== Introduction ============================== -->
+  <!-- This document defines default values for *all* web applications      -->
+  <!-- loaded into this instance of Tomcat.  As each application is         -->
+  <!-- deployed, this file is processed, followed by the                    -->
+  <!-- "/WEB-INF/web.xml" deployment descriptor from your own               -->
+  <!-- applications.                                                        -->
+  <!--                                                                      -->
+  <!-- WARNING:  Do not configure application-specific resources here!      -->
+  <!-- They should go in the "/WEB-INF/web.xml" file in your application.   -->
+
+
+  <!-- Set the default request and response character encodings to UTF-8.   -->
+  <request-character-encoding>UTF-8</request-character-encoding>
+  <response-character-encoding>UTF-8</response-character-encoding>
+
+
+  <!-- ================== Built In Servlet Definitions ==================== -->
+
+
+  <!-- The default servlet for all web applications, that serves static     -->
+  <!-- resources.  It processes all requests that are not mapped to other   -->
+  <!-- servlets with servlet mappings (defined either here or in your own   -->
+  <!-- web.xml file).                                                       -->
+
+    <servlet>
+        <servlet-name>default</servlet-name>
+        <servlet-class>org.apache.catalina.servlets.DefaultServlet</servlet-class>
+        <init-param>
+            <param-name>debug</param-name>
+            <param-value>0</param-value>
+        </init-param>
+        <init-param>
+            <param-name>listings</param-name>
+            <param-value>false</param-value>
+        </init-param>
+        <load-on-startup>1</load-on-startup>
+    </servlet>
+
+  <!-- The JSP page compiler and execution servlet -->
+    <servlet>
+        <servlet-name>jsp</servlet-name>
+        <servlet-class>org.apache.jasper.servlet.JspServlet</servlet-class>
+        <init-param>
+            <param-name>fork</param-name>
+            <param-value>false</param-value>
+        </init-param>
+        <init-param>
+            <param-name>xpoweredBy</param-name>
+            <param-value>false</param-value>
+        </init-param>
+        <load-on-startup>3</load-on-startup>
+    </servlet>
+
+  <!-- ================ Built In Servlet Mappings ========================= -->
+
+    <!-- The mapping for the default servlet -->
+    <servlet-mapping>
+        <servlet-name>default</servlet-name>
+        <url-pattern>/</url-pattern>
+    </servlet-mapping>
+
+    <!-- The mappings for the JSP servlet -->
+    <servlet-mapping>
+        <servlet-name>jsp</servlet-name>
+        <url-pattern>*.jsp</url-pattern>
+        <url-pattern>*.jspx</url-pattern>
+    </servlet-mapping>
+
+  <!-- ==================== Default Session Configuration ================= -->
+    <session-config>
+        <session-timeout>30</session-timeout>
+    </session-config>
+
+  <!-- ===================== Default MIME Type Mappings =================== -->
+    
+    <!-- ...existing mime mappings... -->
+
+    <welcome-file-list>
+        <welcome-file>index.html</welcome-file>
+        <welcome-file>index.htm</welcome-file>
+        <welcome-file>index.jsp</welcome-file>
+    </welcome-file-list>
+
+</web-app>

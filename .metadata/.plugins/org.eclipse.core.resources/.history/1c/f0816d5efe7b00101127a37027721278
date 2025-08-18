@@ -1,0 +1,41 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="java.sql.*, com.company1.DBManager" %>
+<%
+    int id = Integer.parseInt(request.getParameter("id"));
+    Connection conn = null;
+    PreparedStatement pstmt = null;
+    ResultSet rs = null;
+    String name=""; int price=0, stock=0;
+    try {
+        conn = DBManager.getDBConnection();
+        String sql = "SELECT * FROM products WHERE id=?";
+        pstmt = conn.prepareStatement(sql);
+        pstmt.setInt(1, id);
+        rs = pstmt.executeQuery();
+        if(rs.next()){
+            name = rs.getString("name");
+            price = rs.getInt("price");
+            stock = rs.getInt("stock");
+        }
+    } catch(Exception e){ e.printStackTrace();
+    } finally { DBmanager.close(rs,pstmt,conn); }
+%>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>상품 수정</title>
+</head>
+<body>
+<h2>상품 수정</h2>
+<form action="ProductServlet" method="post">
+    <input type="hidden" name="action" value="edit">
+    <input type="hidden" name="id" value="<%=id%>">
+    <p>상품명: <input type="text" name="name" value="<%=name%>" required></p>
+    <p>가격: <input type="number" name="price" value="<%=price%>" required></p>
+    <p>재고: <input type="number" name="stock" value="<%=stock%>" required></p>
+    <input type="submit" value="수정">
+</form>
+<p><a href="product_list.jsp">상품 목록으로</a></p>
+</body>
+</html>

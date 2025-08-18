@@ -1,0 +1,61 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
+<%@ page import="com.erp.dao.ProductDAO" %>
+<%@ page import="com.erp.model.Product" %>
+<%@ page import="java.sql.SQLException" %>
+<%@ page import="java.util.logging.Level" %>
+<%@ page import="java.util.logging.Logger" %>
+
+<%!
+    private static final Logger LOGGER = Logger.getLogger("ProductAddProcessLogger");
+%>
+
+<%
+    request.setCharacterEncoding("UTF-8");
+
+    String pname = request.getParameter("pname");
+    String priceStr = request.getParameter("price");
+    String stockStr = request.getParameter("stock");
+
+    // 입력값 검증
+    if (pname == null || pname.trim().isEmpty() || priceStr == null || stockStr == null) {
+        response.sendRedirect("product_add.jsp?error=1");
+        return;
+    }
+
+    double price;
+    int stock;
+
+    try {
+        price = Double.parseDouble(priceStr);
+        if (price < 0) {
+            response.sendRedirect("product_add.jsp?error=2");
+            return;
+        }
+    } catch (NumberFormatException e) {
+        response.sendRedirect("product_add.jsp?error=2");
+        return;
+    }
+
+    try {
+        stock = Integer.parseInt(stockStr);
+        if (stock < 0) {
+            response.sendRedirect("product_add.jsp?error=3");
+            return;
+        }
+    } catch (NumberFormatException e) {
+        response.sendRedirect("product_add.jsp?error=3");
+        return;
+    }
+
+    // 상품 객체 생성 및 데이터베이스 저장
+    Product product = new Product(pname.trim(), price, stock);
+    ProductDAO productDAO = new ProductDAO();
+
+    try {
+        productDAO.addProduct(product);
+        response.sendRedirect("product_add.jsp?success=1");
+    } catch (SQLException e) {
+        LOGGER.log(Level.SEVERE, "Database error during product addition", e);
+        response.sendRedirect("product_add.jsp?error=4");
+    }
+%>

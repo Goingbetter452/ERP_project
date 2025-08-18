@@ -1,0 +1,53 @@
+<%@ page language="java" contentType="text/html; charset=UTF-8"
+    pageEncoding="UTF-8"%>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Header</title>
+<style>
+    /* 전체적인 레이아웃과 글꼴 설정 */
+    body {
+        font-family: 'Malgun Gothic', sans-serif; /* 깔끔한 기본 글꼴 */
+        margin: 0;
+        padding: 0;
+        background-color: #f8f9fa;
+    }
+
+    /* 헤더 영역 스타일 */
+    header {
+        width: 100%;
+        background-color: #ffffff;
+        border-bottom: 1px solid #e0e0e0;
+        padding: 0 20px; /* 좌우 여백 */
+        box-sizing: border-box; /* 패딩이 너비에 포함되도록 설정 */
+    }
+
+    /* 네비게이션 메뉴 컨테이너 */
+    nav ul.main-menu {
+        list-style: none; /* li 태그의 기본 점 제거 */
+        margin: 0;
+        padding: 0;
+        display: flex; /* 메뉴를 가로로 정렬 */
+        align-items: center; /* 세로 중앙 정렬 */
+        height: 60px; /* 헤더 높이 */
+    }
+
+    /* 메인 메뉴 아이템 (li) */
+    nav ul.main-menu > li {
+        position: relative; /* 드롭다운 메뉴의 기준점 역할 */
+    }
+
+    /* 메뉴 링크 (a) 스타일 */
+    nav ul.main-menu > li > a {
+        display: block;
+        padding: 0 20px; /* 링크의 좌우 여백 */
+        text-decoration: none; /* 밑줄 제거 */
+        color: #333; /* 글자색 */
+        font-size: 16px; /* 글자 크기 */
+        font-weight: 500;
+        line-height: 60px; /* 헤더 높이와 같게 하여 수직 중앙 정렬 */
+        transition: color 0.2s; /* 색상 변경 애니메이션 */
+    }
+
+    /* 메뉴 링크에 마
