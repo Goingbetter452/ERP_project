@@ -1,0 +1,20 @@
+# IDE files and metadata
+.metadata/
+.project
+.classpath
+.settings/
+
+# Build artifacts
+bin/
+target/
+build/
+*.class
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# Libraries
+lib/
+*.jar
