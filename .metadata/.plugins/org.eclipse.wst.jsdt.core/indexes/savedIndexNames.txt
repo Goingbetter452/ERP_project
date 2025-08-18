@@ -1,2 +1,0 @@
-INDEX VERSION 1.4+D:\Shoppingmall_Company_ERP_gitHub\.metadata\.plugins\org.eclipse.wst.jsdt.core\indexes
-2386085119.index

@@ -1,5 +1,0 @@
-INDEX VERSION 1.134
-D:\Shoppingmall_Company_ERP_gitHub\.metadata\.plugins\org.eclipse.jst.jsp.core\jspsearch\4028808771.index
-\Shoppingmall_Company_ERP\src\main\java
-D:\Shoppingmall_Company_ERP_gitHub\.metadata\.plugins\org.eclipse.jst.jsp.core\jspsearch\1084126043.index
-\Shoppingmall_Company_ERP\src\main\java

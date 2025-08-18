@@ -1,8 +1,0 @@
-INDEX VERSION 1.134+D:\Shoppingmall_Company_ERP_gitHub\.metadata\.plugins\org.eclipse.jdt.core
-2386085119.index
-979888944.index
-2001929700.index
-877492451.index
-1865797976.index
-59749844.index
-2456840319.index
