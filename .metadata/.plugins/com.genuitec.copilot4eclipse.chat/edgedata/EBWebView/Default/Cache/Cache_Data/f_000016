@@ -1,0 +1,783 @@
+
+
+let history = [];
+let maxHistorySize = 25;
+let historyIndex = -1;
+let messageInput;
+let autocompleteSelecting = false;
+let messageInputReadonly = false;
+let slashCommandsAndAgents = [];
+
+let useCurrentFileRef = true;
+let $currentFileRef;
+let $currentFileRefName;
+let $currentFileRefSelection;
+let $currentFileRefStatus;
+let copilotModels = [];
+const WI_MARKER = 'WI--'; // working-entry text prefix to avoid confusion with history entries
+
+function getPromptText(omitTrim) {
+  let txt = messageInput.innerText.normalize("NFKC");
+  return omitTrim ? txt : txt.trim();
+}
+
+function handleSendBtn(event) {
+  // is this a stop request
+  if ($("#sendBtnImage").hasClass('fa-stop')) {
+    processMessageInputCancelRequest();
+    return;
+  }
+
+  handlePromptSubmit(event);
+}
+
+function handlePromptSubmit(event) {
+  event.preventDefault();
+  if (autocompleteSelecting) return;
+
+  let prompt = getPromptText();
+  if (!prompt) return;
+
+  let mostRecentPrompt = 
+        history.length > 1 ? 
+          history[history.length - 2] : 
+          null;
+  if (prompt != mostRecentPrompt) {
+    history[history.length - 1] = prompt; // Add input value to history
+    history.push(null); // new working-entry placeholder
+    historyIndex = history.length-1; // Reset history index
+  }
+
+  clearMessageInput();
+  processMessageInputRequest(prompt, getCurrentCopilotModel());
+}
+
+function clearMessageInput() {
+  messageInput.innerHTML = '';
+  setMessageSendButtonActive(false);
+}
+
+function setupPromptHistory(promptsString, maxHistorySize) {
+  history = [];
+  maxHistorySize = maxHistorySize || 25;
+  // from regex101.com
+  const regex = new RegExp('\\"[^\\"]*\\"|[^|]+', 'gm');
+  while ((m = regex.exec(promptsString)) !== null) {
+    // This is necessary to avoid infinite loops with zero-width matches
+    if (m.index === regex.lastIndex) {
+        regex.lastIndex++;
+    }
+    // The result can be accessed through the `m`-variable.
+    m.forEach((match, groupIndex) => {
+        if (ChatApp.debug) console.log(`Found match, group ${groupIndex}: ${match}`);
+        history.push(match);
+    });
+  }
+
+  if (history.length > maxHistorySize+1) {
+    history = history.slice(history.length - maxHistorySize);
+   
+  }
+
+  history.push(null); // Add a null entry to serve as working-entry
+  historyIndex = history.length-1;
+
+  clearMessageInput();
+}
+
+function clearPromptHistory() {
+  history = [];
+  history.push(null); // Add a empty entry to serve as working-entry
+  historyIndex = 0;
+  clearMessageInput();
+}
+
+function handlePromptPreinput(event) {
+  let keyCode = event.which || event.keyCode;
+
+  if (event.key === "Enter") { // Enter key, keyCode === 13
+    if (!event.shiftKey) {
+      handlePromptSubmit(event);
+    }
+    return;
+  }
+
+  if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+
+  const idx = getCaretIndexInEditable(messageInput);
+
+  if (event.key === "ArrowUp") {
+     if (idx===0 && historyIndex > 0) {
+        event.preventDefault();
+
+        // save working-entry if it has changed
+        let promptText = getPromptText();
+        let currentHistoryEntry = normalizeNewlines(history[historyIndex]);
+
+        if (historyIndex !== history.length-1 && promptText != currentHistoryEntry) {
+          // Save current input as working-entry before moving up
+          history[history.length-1] = WI_MARKER + promptText;
+          historyIndex = history.length - 1; // Reset to working-entry
+        }
+
+        historyIndex--; // Move up in the command history
+        messageInput.innerText = !history[historyIndex] ? '' : history[historyIndex];
+        moveCursorToBeginning();
+     }
+     return;
+  }
+
+  const msgInputLength = getTotalLength(messageInput);
+  if (event.key === "ArrowDown" && idx === msgInputLength) {
+    event.preventDefault();
+
+    let promptText = getPromptText();
+    let currentHistoryEntry = normalizeNewlines(history[historyIndex]);
+
+    if (historyIndex !== history.length-1 && promptText != currentHistoryEntry) {
+      // Save current input as working-entry
+      history[history.length-1] = WI_MARKER + promptText;
+      historyIndex = history.length - 1; // set historyIndex to end of hstory
+      return;
+    }
+
+    if (historyIndex < history.length) {
+      let nextIdx = historyIndex+1 <= history.length-1 ? historyIndex+1 : historyIndex;
+      historyIndex = history[nextIdx] ? nextIdx : nextIdx - 1; // Move down in the command history
+      let content = history[historyIndex];
+      if (historyIndex === history.length - 1) {
+        content = content.replace(WI_MARKER, ''); //strip working-entry marker
+      }
+
+      messageInput.innerText = !content ? '' : content;
+      moveCursorToEnd();
+    } 
+    return;
+  }
+
+}
+
+function handlePromptPostinput(event) {
+  if (messageInputReadonly) {
+    setMessageSendButtonActive(false);
+    return;
+  }
+
+  let prompt = getPromptText();
+  let isActive = 
+        prompt.length > 0 &&
+        !(prompt.length === 1 && (prompt === '@' || prompt === '/'));
+
+  setMessageSendButtonActive(isActive);
+
+  if (prompt === '') {
+    messageInput.innerHTML = ''; // Clear residual empty nodes to force data-placeholder to show
+    return;
+  }
+
+  // highlightKeyword();
+}
+
+function getCaretIndexInEditable(editableDiv) {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return 0;
+  const range = sel.getRangeAt(0).cloneRange();
+  const pre = document.createRange();
+  pre.selectNodeContents(editableDiv);
+  pre.setEnd(range.startContainer, range.startOffset);
+  return pre.toString().length;
+}
+
+function getTotalLength(el) {
+  const fullRange = document.createRange();
+  fullRange.selectNodeContents(el);
+  return fullRange.toString().length;
+}
+
+function moveCursorToBeginning() {
+  // Focus the editable div to ensure cursor visibility
+  messageInput.focus();
+
+  //move cursor to 1st index of input
+  let range = document.createRange();
+  
+  // Set range to the end of the editable div
+  range.selectNodeContents(messageInput); // Select the entire contents
+  range.collapse(true); // Collapse the range to the end point, false means end
+
+  let sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function moveCursorToEnd() {
+  // Focus the editable div to ensure cursor visibility
+  messageInput.focus();
+
+  //move cursor to end of input
+  let range = document.createRange();
+
+  // Set range to the end of the editable div
+  range.selectNodeContents(messageInput); // Select the entire contents
+  range.collapse(false); // Collapse the range to the end point, false means end
+
+  // Apply it to the window selection
+  let sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function showSubmitButton() {
+  $("#sendBtnImage")
+    .removeClass("fa-light fa-stop")
+    .addClass("fa-light fa-paper-plane-top");
+  $("#sendBtn").attr('title', 'Send');
+}
+
+function showStopButton() {
+ $("#sendBtnImage")
+    .removeClass("fa-light fa-paper-plane-top")
+    .addClass("fa-light fa-stop");
+  $("#sendBtn").attr('title', 'Stop');
+}
+
+function setMessageInputReadonly(val) {
+  messageInputReadonly = val;
+  let display = val ? 'inherit' : 'none';
+  let messageInputOverlay = document.getElementById('messageInputOverlay');
+  messageInputOverlay.style.display = display;
+  
+  if (val) {
+    setMessageSendButtonActive(false);
+    messageInput.style.color = 'var(--disabled)';
+  } else {
+    handlePromptPostinput(null);
+    messageInput.style.color = 'var(--foreground)';
+  }
+}
+
+function setMessageSendButtonActive(val) {
+  if (val) {
+   $('#sendBtnImage').addClass('active');
+  } else {
+    $('#sendBtnImage').removeClass('active');
+  }
+}
+
+function handleExtControlSelect(event) {
+  setMessageInputText('@',true);
+}
+
+function handleSelectReferences(event) {
+  processSelectReferencesRequest();
+}
+
+function handleSlashControlSelect(event) {
+  setMessageInputText('/',true);
+}
+
+function uploadCopilotModels(models) {
+  if (ChatApp.debug) console.log('uploadCopilotModels:', models);
+  copilotModels = [];
+  for (let i = 0; i < models.length; i+=2) {
+    let model = {id: models[i], name: models[i+1]};
+    copilotModels.push(model);
+  }
+  updateCopilotModelsSelect();
+}
+
+function updateCopilotModelsSelect() {
+  let $select = $('#modelSelect');
+  if ($select.length === 0) return;
+
+  $select.empty();
+
+  let defaultValue;
+  if (copilotModels.length === 0) {
+    $select.append($('<option>', {
+      value: 'default',
+      text: 'Default Model'
+    }));
+    defaultValue = 'default';
+  } else {
+    for (let i = 0; i < copilotModels.length; i++) {
+      if (i === 0) defaultValue = copilotModels[i].id;
+      $select.append($('<option>', {
+        value: copilotModels[i].id,
+        text: copilotModels[i].name
+      }));
+    }
+  }
+
+  $select.val(defaultValue);
+  $select.selectmenu('refresh');
+}
+
+function getCurrentCopilotModel() {
+  let $select = $('#modelSelect');
+  if ($select.length === 0) return 'default';
+
+  return $select.val();
+}
+
+function setCopilotModel(modelId) {
+  let $select = $('#modelSelect');
+  if ($select.length === 0) return;
+  $select.val(modelId);
+  $select.selectmenu('refresh');
+}
+
+function uploadSkillsAndAgents(infos) {
+  if (ChatApp.debug) console.log('uploadSkillsAndAgents:', infos);
+  if (!infos) return;
+
+  slashCommandsAndAgents = [];
+  let clearHistoryCmd = null;
+  let helpCmd = null;
+
+  for (let i = 0; i < infos.length; ) {
+
+    // create skill rep
+    let info = {
+      id: infos[i],
+      desc: infos[i+1]
+    };
+
+    if (info.id.startsWith('/clear-')) {
+      clearHistoryCmd = info;
+    } else if (info.id.startsWith('/help')) {
+      helpCmd = info;
+    } else {
+      slashCommandsAndAgents.push(info);
+    }
+
+    if (ChatApp.debug) console.log('i: ', i, info);
+    i += info.id.startsWith('/') ? 2 : 3;
+  }
+
+  slashCommandsAndAgents.sort((a, b) => {
+    return a.id.localeCompare(b.id);
+  });
+
+  slashCommandsAndAgents.push(clearHistoryCmd);
+  slashCommandsAndAgents.push(helpCmd);
+
+  // create alt agent participants for extensions
+  // for (let i = 0; i < infos.length; ) {
+    
+  //   if (infos[i].startsWith('//')) {
+  //     i += 2;
+  //     continue;
+  //   }
+
+  //   createParticipant(
+  //     Participant.AGENT_ROLE_ID, 
+  //     infos[i].id, 
+  //     infos[i].name, 
+  //     infos[i].avatarURI);
+
+  //   i += 3;
+  // }
+
+}
+
+function getSkillsAndAgents(request, responseFn) {
+  let results = [];
+
+  if (!slashCommandsAndAgents || slashCommandsAndAgents.length === 0) {
+    responseFn(null);
+    return;
+  }
+
+  let requestTrimmed = request.term ? request.term.trim() : '';
+  if (requestTrimmed.length === 0) {
+    responseFn(null);
+    return;
+  }
+
+  slashCommandsAndAgents.forEach(info => {
+    if (info.id.startsWith(requestTrimmed)) {
+      results.push({label: info.id, desc: info.desc});
+    }
+  });
+
+  responseFn(results);
+}
+
+function setCurrentFileRef(uri, selection, isEnabled) {
+
+  if (uri) {
+    let filename = uri.split(/[/\\]/).pop();
+    let fullpath = stripFileScheme(uri);
+
+    $currentFileRefName.text(filename);
+    $currentFileRefSelection.text(selection ? selection : ':');
+
+    let tooltip = 'Current file context\n' + fullpath;
+    $currentFileRefName.attr('title', tooltip);
+    $currentFileRefSelection.attr('title', tooltip);
+    $currentFileRefStatus.attr('title', tooltip);
+
+    enableUseCurrentFileRef(isEnabled);
+
+    $currentFileRef.show();
+  } else {
+    $currentFileRef.hide();
+  }
+}
+
+function enableUseCurrentFileRef(isEnabled) {
+  useCurrentFileRef = isEnabled
+
+  if (useCurrentFileRef) {
+    $currentFileRefStatusImgEnabled.show();
+    $currentFileRefStatusImgDisabled.hide();
+    $currentFileRefName.removeClass('disableCurrentFileRef');
+    $currentFileRefStatus.css('font-style', 'normal');
+  } else {
+    $currentFileRefStatusImgEnabled.hide();
+    $currentFileRefStatusImgDisabled.show();
+    $currentFileRefName.addClass('disableCurrentFileRef');
+    $currentFileRefStatus.css('font-style', 'italic');
+  }
+}
+
+function toggleUseCurrentFileRef() {
+  useCurrentFileRef = !useCurrentFileRef;
+  enableUseCurrentFileRef(useCurrentFileRef);
+  
+  // send notice to server
+  processEnableCurrentFileContextRequest(useCurrentFileRef);
+}
+
+function handleCurrentFileRefSelect(event) {
+}
+
+/* Button template
+<button class="miref">
+  Hello World
+  <i class="addRefBtnCloseImg fa-kit fa-close"></i>
+</button> 
+*/
+function addMessageInputReference(visualId, uri) {
+  let filename = uri.split(/[/\\]/).pop();
+  let fullpath = stripFileScheme(uri);
+
+  while (fullpath.startsWith('/') || fullpath.startsWith('\\')) {
+    fullpath = fullpath.substring(1);
+  }
+
+  let $mireferencesContainer = $('#mireferencesBtnBar');
+  let $button = $('<button>', {
+    id: visualId,
+    text: filename,
+    title: fullpath,
+    class: "miref"});
+    $button.click(function(event) {
+      if (!$(event.target).hasClass("closeIcon")) {
+        if (ChatApp.debug) console.log(event.target);
+        processOpenEditorRequest(visualId);
+      }
+    });
+    
+  let $ximg = $('<i>', {
+    class: "addRefBtnCloseImg fa-kit fa-close"});
+  $ximg.click(function(event) {
+      event.stopPropagation();
+      processRemoveReferenceRequest(visualId);
+    });
+
+  $button.append($ximg);
+  $mireferencesContainer.append($button);
+
+  moveCursorToEnd();
+}
+
+function removeMessageInputReference(visualId) {
+  let $button = $('#' + visualId);
+  if ($button.length) {
+    $button.remove();
+  }
+
+  moveCursorToEnd();
+}
+
+function removeAllMessageInputReferences() {
+  $('#mireferencesBtnBar').children().not('#currentFileRef').remove();
+  moveCursorToEnd();
+}
+
+function setMessageInputText(txt, triggerAutoComplete) {
+  messageInput.innerHTML = txt;
+  moveCursorToEnd();
+  // highlightKeyword();
+  handlePromptPostinput(null);
+  
+  if (!triggerAutoComplete) return;
+
+  // Trigger autocomplete menu and highlight first item
+  let $messageInput = $(messageInput);
+  $messageInput.autocomplete("search", txt);
+  setTimeout(() => {
+    const $menu = $messageInput.autocomplete("widget");
+    if ($menu && $menu.children("li").length > 0) {
+        const firstItem = $menu.children("li:first");
+        $messageInput.data("ui-autocomplete").menu.focus(null, firstItem);
+    }
+  }, 25); // Delay to ensure the menu has been populated
+}
+
+function setupMessageInputListeners() {
+  messageInput = document.getElementById('messageInput');
+  messageInput.addEventListener('keydown', handlePromptPreinput);
+  messageInput.addEventListener('input', handlePromptPostinput);
+  messageInput.addEventListener('click', function(event) {
+    if ( messageInput.textContent.trim() === "" ) {
+      messageInput.focus();
+    }
+  });
+  messageInput.addEventListener('paste', function(e) {
+    e.preventDefault();
+    
+    // 1) Get plain-text clipboard payload
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    if (!text) return;
+
+    // 2) Get current selection & range
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+
+    // 3) Remove any current selection
+    range.deleteContents();
+
+    // 4) Insert a text node
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+
+    // 5) Move caret after the inserted text node
+    range.setStartAfter(textNode);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+
+  document.getElementById('sendBtn').addEventListener('click', handleSendBtn);
+
+  autocompleteSelecting = false;
+
+  $( "#messageInput" ).autocomplete({
+    source: getSkillsAndAgents,
+    minLength: 1,
+    autoFocus: true,
+    position: {
+      my: "left bottom",
+      at: "left top",
+      of: "#messageInputForm"
+    },
+    open: function( event, ui ) {
+      autocompleteSelecting = true;
+      let inputWidth = $('#messageInput').width() + 30;
+      $(".ui-autocomplete").css('width', inputWidth + 'px');
+    },
+    select: function( event, ui ) {
+      event.preventDefault();
+      $(this).autocomplete('close');
+
+      if ("/clear" == ui.item.value) {
+        processClearConversationRequest();
+      } else if ("/clear-history" == ui.item.value) {
+        processClearPromptHistoryRequest();
+      } else {
+        setMessageInputText(ui.item.value + " ", false);
+      }
+
+      return false;
+    },
+    close: function(event, ui) {
+      autocompleteSelecting = false;
+    }
+  }).data( "ui-autocomplete" )
+  ._renderItem = function( ul, item ) {
+    return $("<li>")
+      .append(
+        "<div style='display: flex; justify-content: space-between; width: 100%; align-items: center; box-sizing: border-box; position: relative;'>" +
+          "<span style='white-space: nowrap; margin-right: 25px;'>" + item.label + "</span>" +
+          "<span style='white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-grow: 1; max-width: calc(100% - 25px); text-align: right; margin-left: auto;  font-size: 10px;'>" + item.desc + "</span>" +
+        "</div>")
+      .appendTo(ul);
+
+    // return $("<li>")
+    //   .append(
+    //     "<div style='display: flex; justify-content: space-between;'>" +
+    //       "<span style='float: left;'>" + item.label + "</span>" +
+    //       "<span style='float: right; color: var(--disabled); font-size: 10px;'>" + item.desc + "</span>" +
+    //     "</div>")
+    //   .appendTo(ul);
+  };
+
+
+  $currentFileRef = $('#currentFileRef');
+  $currentFileRefName = $('#currentFileRefName');
+  $currentFileRefSelection = $('#currentFileRefSelection');
+  $currentFileRefStatus = $('#currentFileRefStatus');
+  $currentFileRefStatusImgEnabled = $('#currentFileRefStatusImgEnabled');
+  $currentFileRefStatusImgDisabled = $('#currentFileRefStatusImgDisabled');
+  $currentFileRefStatusImgDisabled.toggle();
+
+  $currentFileRefStatusImgEnabled.click(toggleUseCurrentFileRef);
+  $currentFileRefStatusImgDisabled.click(toggleUseCurrentFileRef);
+
+  $currentFileRef.hide();
+
+  $("#modelSelect").selectmenu({
+    classes: {
+        "ui-selectmenu-button": "custom-select"
+    },
+    // Custom icon
+    icons: {
+        button: "ui-icon-triangle-1-s"
+    },
+    // Position menu
+    position: {
+        my: "right bottom",
+        at: "right top"
+    },
+    create: function(event, ui) {
+      // Set a title attribute on the generated widget (button)
+      $(this).selectmenu("widget").attr("title", "Your Chat Model");
+    },
+    change: function(event, ui) {
+        processSetModelRequest(ui.item.value);
+      }
+  });
+}
+
+function stripFileScheme(uri) {
+  if (!uri.startsWith('file:')) return uri;
+
+  let path = uri.substring(5);
+  while (path.startsWith('/') || path.startsWith('\\')) {
+    path = path.substring(1);
+  }
+  return path;
+}
+
+function highlightKeyword() {
+  let prompt = getPromptText(true);
+  const keywords = slashCommandsAndAgents; //['@models', '@github', '/doc', '/simplify', '/explain'];
+  
+  if (!prompt) return;
+
+  const spaceIndex = prompt.search(/\S/); // Find the index of the first non-space character
+  let firstWord, rest;
+  if (spaceIndex !== -1) {
+    // Find the end of the first word
+    const firstSpaceAfterWord = prompt.indexOf(" ", spaceIndex);
+    
+    if (ChatApp.debug) {
+      for (let i = 0; i < prompt.length; i++) {
+        console.log(`The code of '${prompt[i]}' is:`, prompt.charCodeAt(i));
+      }
+    }
+
+    if (firstSpaceAfterWord !== -1) {
+      // Extract the first word and the remaining part
+      firstWord = prompt.slice(0, firstSpaceAfterWord); // Includes the first word with leading spaces
+      rest = prompt.slice(firstSpaceAfterWord);    // Remaining sentence, spaces intact
+    } else {
+      // If no space is found after the first word, the sentence has only one word
+      firstWord = prompt;
+      rest = "";
+    }
+  } else {
+    // Handle the case where the sentence is empty or only contains spaces
+    return;
+  }
+
+  const isKeyword = keywords.some(keyword => keyword.id.startsWith(firstWord)); // Partial match
+
+  // Build the new HTML
+  let styledWord = isKeyword
+    ? `<span class="keyword">${firstWord}</span>`
+    : null;
+
+  let caretPos = getCaretCharacterOffsetWithin(messageInput);
+
+  let highlighted = [];
+  if (styledWord) {
+    highlighted.push($(styledWord));
+    highlighted.push(document.createTextNode(rest));
+  } else {
+    highlighted.push(document.createTextNode(prompt));
+  }
+
+  $(messageInput).empty().append(highlighted);
+
+  setCursor(messageInput, caretPos);
+}
+
+function getCaretCharacterOffsetWithin(element) {
+  let caretOffset = 0;
+  if (typeof window.getSelection != "undefined") {
+    let range = window.getSelection().getRangeAt(0);
+    let preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(element);
+    preCaretRange.setEnd(range.endContainer, range.endOffset);
+    caretOffset = preCaretRange.toString().length;
+  } else if (typeof document.selection != "undefined" && document.selection.type != "Control") {
+    let textRange = document.selection.createRange();
+    let preCaretTextRange = document.body.createTextRange();
+    preCaretTextRange.moveToElementText(element);
+    preCaretTextRange.setEndPoint("EndToEnd", textRange);
+    caretOffset = preCaretTextRange.text.length;
+  }
+  return caretOffset;
+}
+
+function setCursor(node, pos) {
+  if (!node || pos == null){
+      return false;
+  } 
+  
+  const newRange = document.createRange();
+  let charCount = 0;
+
+  function setupRange(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const textLength = node.textContent.length;
+      if (charCount + textLength >= pos) {
+        newRange.setStart(node, pos - charCount);
+        //newRange.setEnd(node, cursorOffset - charCount);
+        return true;
+      }
+      charCount += textLength;
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      for (const child of node.childNodes) {
+        if (setupRange(child)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  if (!setupRange(node)) return false;
+
+  let selection = window.getSelection();
+  selection.removeAllRanges();
+  newRange.collapse(true);
+  selection.addRange(newRange);
+  
+  return true;
+}
+
+function normalizeNewlines(str) {
+  if (!str) return str;
+
+  // turn all CR or CRLF into LF
+  return str.replace(/\r\n?/g, "\n");
+}
+
+$(document).ready(setupMessageInputListeners);

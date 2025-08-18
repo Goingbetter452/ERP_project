@@ -1,0 +1,138 @@
+@charset "UTF-8";
+
+a {
+	text-decoration: none;	
+}
+
+.card {
+	width: 600px;
+	height: 600px;
+	margin: 100px auto;
+	
+	box-shadow: 3px 3px 50px #e6e6e6;
+	border-radius: 20px;
+	position: relative;
+}
+
+.card-header {
+	padding: 20px;
+	text-align: center;
+}
+.card-header h1 {
+	font-size: 30px;
+	font-weight: 600;
+}
+
+.card-body {
+	padding: 20px;
+	text-align: center;
+}
+.card-body input[type="search"] {
+	padding: 10px;
+	font-size: 16px;
+	width: 300px;
+	border: 1px solid #999;
+	border-radius: 10px;
+}
+a.btn {
+	padding: 10px 15px;
+	color: #fff;
+	border-radius: 10px;
+	background-color: tomato;
+	font-weight: 700;
+}
+
+.notice-reg-area {
+	position: absolute;
+	right: 0;
+	/* bottom: 0; */
+	padding: 10px;
+	margin-right: 20px;
+}
+
+.content-box {
+	margin-top: 40px;
+	border: 1px solid #e6e6e6;
+}
+.content-box .content-header,
+.content-box .content-items {
+	display: flex;
+	align-items: center;
+}
+.content-box .content-header div {
+	text-align: center;
+}
+.content-box .content-header div:nth-child(1) {
+	width: 10%;
+}
+.content-box .content-header div:nth-child(2) {
+	width: 300px;
+}
+.content-box .content-header div:nth-child(3) {
+	width: 15%;
+}
+.content-box .content-header div:nth-child(4) {
+	width: 25%;
+}
+.content-box .content-items div {
+	
+}
+.content-box .content-items div:nth-child(1) {
+	text-align: center;
+	width: 10%;
+}
+.content-box .content-items div:nth-child(2) {
+	width: 300px;
+	padding-left: 20px;
+}
+.content-box .content-items div:nth-child(3) {
+	text-align: center;
+	width: 15%;
+}
+.content-box .content-items div:nth-child(4) {
+	text-align: center;
+	width: 25%;
+}
+
+.card-write {
+	padding: 20px;
+}
+.card-write .info {
+	display: flex;
+	padding: 20px;
+}
+.card-write .info > div {
+	width: 20%;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	margin-right: 10px;
+}
+.card-write .info input[type="text"] {
+	display: inline-block;
+	padding: 10px;
+	border: 1px solid #999;
+	border-radius: 10px;
+	box-shadow: 3px 3px 10px #e6e6e6;
+	height: 13px;
+}
+.card-write .info.info-writer input[type="text"] {
+	width: 30%;
+}
+.card-write .info.info-title input[type="text"] {
+	width: 60%;
+}
+
+.card-write .info-content textarea {
+	padding: 10px;
+	border-radius: 10px;
+	box-shadow: 3px 3px 10px #e6e6e6;
+	width: 80%;
+	height: 200px;
+	margin-left: 10px;
+}
+
+.card-bottom-btns {
+	text-align: center;
+}
+

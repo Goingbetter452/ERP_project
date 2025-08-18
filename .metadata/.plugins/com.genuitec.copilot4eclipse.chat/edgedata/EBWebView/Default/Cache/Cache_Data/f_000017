@@ -1,0 +1,1159 @@
+
+const ChatApp = {
+  sessionId: undefined,
+  sessionParam: undefined, 
+  md2htmlConverter: undefined,
+  messageContainer: undefined,
+  ws: undefined,
+  worker: undefined,
+  $newMessageIndicator: undefined,
+  autoscrollEnabled: true,
+  threshold: 50, // pixels from bottom that counts as "at the bottom"
+  scrollAnimation: 300, // ms
+  scrollAnimationEnabled: true,
+  debug: false
+};
+
+function initializeChatApp() {
+
+  ChatApp.sessionParam = window.location.search;
+  ChatApp.sessionId = ChatApp.sessionParam.split('=')[1];
+
+  // setup page visibility
+  $("#chatMgmtPage").hide();
+  $("#signOnPage").hide();
+  $("#loadingPage").hide();
+  $("#chatPage").hide();
+  $("#c4eChatApp").show();
+
+  setupDnd();
+
+  showdown.extension('showdown-extension-prism-js', function() {
+    'use strict';
+    var pattern = /```/g;
+
+    return {
+      type: 'lang',
+      filter: function (text, converter, options) {
+        var lines = text.split(/\r?\n/);
+
+        var starting = true;
+        let newLines = [];
+        lines.forEach( (line) => {
+          if( line.substr(0, 3) === '```' ) {
+          if(starting) {
+            const codeInfo = line.substring(3, line.length);
+            const split = codeInfo.split(":");
+            const language = split[0];
+            const lines = split[1];
+            let lineClass = "";
+            if( lines ) {
+              lineClass = ' data-line="' + lines + "\"";
+            }
+            newLines.push("<pre" + 
+              lineClass +  
+              // "data-src=\"myfile.js\" data-download-link" + 
+              "><code class=\"language-" + language + "\">");
+            starting = false;
+          } else {
+            newLines.push("</code></pre>");
+            starting = true;
+          }
+          } else {
+            newLines.push(line);
+          }
+        });
+
+        return newLines.join("\n");
+      },
+      regex: pattern,
+      replace: 'bar'
+    };
+  });
+
+  Prism.plugins.toolbar.registerButton('InsertCodeBlock', (env) => { 
+    let $button = $('<button/>', {
+      title: 'Insert at editor cursor position',
+      html: '<i class="fa-regular fa-file-import toolbar-img" alt="Insert" />'
+    }).css({
+        border: 'none',
+        backgroundColor: 'transparent',
+        cursor: 'pointer',
+        padding: '0'
+    }); 
+
+  // Prism.plugins.toolbar.registerButton('InsertCodeBlock', (env) => { 
+  //   let $button = $('<button/>', {
+  //     // class: 'image-button',
+  //     title: 'Insert at editor cursor position',
+  //     html: '<img src="assets/imgs/insert_template.png" alt="Insert" />'
+  //   }).css({
+  //       border: 'none',
+  //       backgroundColor: 'transparent',
+  //       cursor: 'pointer',
+  //       padding: '0'
+  //   }); 
+
+    $button.click( () => { // optional
+      let codeblockInfo = findCodeblockIndex(env.element);
+      processMessageAcceptCodeblockRequest(codeblockInfo.id, codeblockInfo.codeblockIdx, env.code);
+    });
+
+    return $button.get(0);
+  });
+
+  Prism.plugins.toolbar.registerButton('copyToClipboard', (env) => { 
+
+    let $button = $('<button/>', {
+      // class: 'image-button',
+      title: 'Copy to Clipboard',
+      html: '<i class="fa-regular fa-copy toolbar-img" alt="Copy" />'
+      //html: '<img src="assets/imgs/paste_edit.png" alt="Copy" />'
+    }).css({
+      border: 'none',
+      backgroundColor: 'transparent',
+      cursor: 'pointer',
+      padding: '0'
+    });
+
+    $button.click( async () => {
+      try {
+        // move copy to swt impl
+        // await navigator.clipboard.writeText(env.code);
+        let codeblockInfo = findCodeblockIndex(env.element);
+        processMessageCopyCodeblockRequest(codeblockInfo.id, codeblockInfo.codeblockIdx, env.code);
+      } catch(err) {
+        alert('Copy to clipboard not supported');
+      }
+    });
+
+    return $button.get(0);
+  });
+
+  ChatApp.md2htmlConverter = new showdown.Converter({
+    extensions: ['showdown-extension-prism-js']
+  });
+
+  // $("#referenceContainer").accordion({
+  //   active: false,
+  //   collapsible: true
+  // });
+
+  ChatApp.messageContainer = document.getElementById('messageContainer');
+  $(ChatApp.messageContainer).on('scroll', $.debounce(250, checkScrollPosition));
+
+  ChatApp.$newMessageIndicator = $(ChatApp.messageContainer).find('#newMessageIndicator');
+  ChatApp.$newMessageIndicator.click(scrollToBottom);
+  ChatApp.$newMessageIndicator.hide();
+  
+
+  // chatPage toolbar setup
+  $("#chatPageScrollBottomBtn").click(scrollToBottom);
+  $("#chatPageScrollTopBtn").click(scrollToTop);
+  $("#chatPageNewConversationBtn").click(processNewConversationRequest);
+  $("#showConversationMgmtPageBtn").click(processShowConversationMgmtPageRequest);
+  $("#showChatMenuBtn").click( function(evt) {
+      let screenX = evt.screenX;
+      let screenY = evt.screenY;
+      processShowChatPageMenuRequest(screenX, screenY);
+    });
+
+    // conversationMgmtPage toolbar setup
+    $("#backGroup").click(processShowChatPageRequest);
+    $("#conversationMgmtPageNewConversationBtn").click(processNewConversationRequest);
+    $("#conversationMgmtPageDeleteAllBtn").click(processDeleteAllConversationsRequest);
+
+    // signOnPage setup
+    $("#signOnBtn").click(processSignOnRequest);
+    
+  // ChatApp.worker = new Worker('worker.js');
+  // ChatApp.worker.onmessage = function(e) {
+  //   // Receive the output from the worker
+  //   updateProcessedMessage(e.data.visualId, e.data.content);
+  // };
+
+  // ChatApp.worker.onerror = function(error) {
+  //   console.error('Worker error: ', error);
+  // };
+
+  ChatApp.wsUrl = "ws://" + window.location.host + "/chat/api/msg/command" + ChatApp.sessionParam;
+  handleCreateWSClient();
+
+  $("#messageInputInfo").css("display", "none");
+}
+
+function showChatPage() {
+  $("#chatMgmtPage").hide();
+  $("#signOnPage").hide();
+  $("#loadingPage").hide();
+  $("#chatPage").show();
+}
+
+function showChatMgmtPage() {
+  $("#chatPage").hide();
+  $("#signOnPage").hide();
+  $("#loadingPage").hide();
+  $("#chatMgmtPage").show();
+}
+
+function showSignOnRequiredPage() {
+  $("#chatPage").hide();
+  $("#chatMgmtPage").hide();
+  $("#loadingPage").hide();
+  $("#signOnPage").show();
+}
+
+function loadingPage() {
+  $("#chatPage").hide();
+  $("#chatMgmtPage").hide();
+  $("#signOnPage").hide();
+  $("#loadingPage").show();
+}
+
+function setTheme(theme) {
+  if (!theme) return;
+
+  for (const [key, value] of Object.entries(theme)) {
+    if (ChatApp.debug) console.log(`${key}: ${value}`);
+    document.documentElement.style.setProperty(key, value);
+  }
+
+  // let background = theme['--background'];
+  // if (background) {
+  //   document.documentElement.style.setProperty('--background', background);
+  // }
+}
+
+function markdown2html(mdContent) {
+  return ChatApp.md2htmlConverter.makeHtml(mdContent);
+}
+
+function colorizeCodeblocks(element) {
+  Prism.highlightAllUnder(element);
+}
+
+function findCodeblockIndex(element) {
+  let cb = $(element);
+  let msg = cb.closest(".message");
+  let id = $(msg).attr('id');
+  let msgBody = cb.closest("#messageBody");
+  let codeblocks = msgBody.find('code[class^="language-"]');
+  let codeblockIdx = codeblocks ? codeblocks.index(cb) : -1;
+
+  return {id: id, codeblockIdx: codeblockIdx};
+}
+
+// Container Mgmt
+
+function visualId2HTMLId(visualId, includeHash) {
+  return includeHash ? '#' + visualId : visualId;
+}
+
+function setScrollAnimationEnabled(enabled) {
+  ChatApp.scrollAnimationEnabled = enabled;
+  if (enabled) {
+    scrollToBottom();
+  }
+}
+
+function scrollToTop() {
+  $(ChatApp.messageContainer).animate({
+    scrollTop: 0
+  }, ChatApp.scrollAnimationEnabled ? ChatApp.scrollAnimation : 0);
+}
+
+// Scroll to the bottom and resume autoscroll.
+function scrollToBottom(immediate) {
+  if (ChatApp.debug) console.log('scrollToBottom');
+ // $.debounce(250, immediate, function() {
+    ChatApp.autoscrollEnabled = true;
+    $(ChatApp.messageContainer).animate({ 
+      scrollTop: $(ChatApp.messageContainer)[0].scrollHeight
+    },  ChatApp.scrollAnimationEnabled ? ChatApp.scrollAnimation : 0);
+    ChatApp.$newMessageIndicator.hide();
+  //});
+}
+
+function checkScrollPosition() {
+  if (ChatApp.debug) console.log('checkScrollPosition');
+  let $messageContainer = $(ChatApp.messageContainer);
+  let scrollTop = $messageContainer.scrollTop();
+  let clientHeight = $messageContainer.outerHeight();
+  let scrollHeight = $messageContainer[0].scrollHeight;
+  let distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+  
+  if (distanceFromBottom < ChatApp.threshold) {
+    // User is near the bottom: enable autoscroll and hide the indicator.
+    ChatApp.autoscrollEnabled = true;
+    ChatApp.$newMessageIndicator.hide(100);
+  } else {
+    // User has scrolled up: disable autoscroll and show the indicator.
+    ChatApp.autoscrollEnabled = false;
+    ChatApp.$newMessageIndicator.show(100);
+  }
+}
+
+// function debounceCheckScrollPosition() {
+//   //return debounce(checkScrollPosition, 200);
+//   $.debounce( 250, checkScrollPosition);
+// }
+
+function updateToolbarConversationName(newName) {
+  newName = newName && newName.trim().length > 0 ?
+     newName : '***';
+  $("#toolbarConversationName").text(newName);
+  $("#toolbarConversationName").attr('title', newName);
+}
+
+// Participant Mgmt
+class Participant {
+  static USER_ROLE_ID = 0;
+  static SYSTEM_ROLE_ID = 1;
+  static AGENT_ROLE_ID = 2;
+
+  constructor(roleId, id, name, avatarUrl) {
+    this.roleId = roleId;
+    this.id = id;
+    this.name = name;
+    this.avatarUrl = avatarUrl;
+  }
+
+  isUser() {
+    return this.roleId === Participant.USER_ROLE_ID;
+  }
+
+  isSystem() {
+    return this.roleId === Participant.SYSTEM_ROLE_ID;
+  }
+
+  isAgent() {
+    return this.roleId === Participant.AGENT_ROLE_ID;
+  }
+
+  getCssClassname() {
+    if (this.isUser()) return 'user';
+    if (this.isSystem()) return 'system';
+    if (this.isAgent()) return 'agent';
+    return 'unknown';
+  }
+}
+
+let participants = new Map(); // key: userId, value: Participant
+
+// API
+function createParticipant(roleId, id, name, avatarUrl) {
+  let participant = new Participant(roleId, id, name, avatarUrl);
+  participants.set(id, participant);
+  return participant;
+}
+
+function getParticipant(id) {
+  return participants.get(id);
+}
+
+function removeParticipant(id) {
+  participants.delete(id);
+}
+
+// Message Mgmt
+let messageList = [];
+
+function removeFromMessageList(messageElement) {
+  let idx = messageList.indexOf(messageElement);
+  if (idx >= 0) {
+    messageList.splice(idx, 1);
+  }
+}
+
+function nextMessage(messageElement) {
+  let idx = messageList.indexOf(messageElement) + 1;
+  if (idx == -1) return null;
+  if (idx >= messageList.length) return null;
+  return messageList[idx];
+}
+
+function createMessage(visualId, participantId, content) {
+  // ChatApp.worker.postMessage("X");
+
+  let $msgContainerTemplate = $('#message');
+  let $message = $msgContainerTemplate.clone();
+  $message.attr('id',visualId2HTMLId(visualId));
+  $message.show();
+
+  let participant = getParticipant(participantId);
+  $message.addClass(participant.getCssClassname());
+  $message.data(participant, participant.typeId);
+
+  const $messageHeaderInfo = $message.find('#messageHeaderInfo');
+
+  const $participant1 = $messageHeaderInfo.find('#participantsContainer #participant1');
+  const $avatarNode = $participant1.find('#avatar');
+  $avatarNode.attr('src', participant.avatarUrl);  //'https://github.com/' + userName + '.png';
+  const $nameNode = $participant1.find('#name');
+  $nameNode.text(participant.name);
+
+  const $participant2 = $messageHeaderInfo.find('#participantsContainer #participant2');
+  $participant2.hide();
+
+  let hasContent = content && content.length > 0;
+
+  // configure button click handlers
+  let $closeBtnNode = $message.find('#closeBtn');
+  $closeBtnNode.click(() => {
+    processMessageDeleteTurnRequest(visualId);
+  });
+
+  let $thumbsUpBtnNode = $message.find('#thumbsUpBtn');
+  $thumbsUpBtnNode.click( () => {
+    rateMessage(visualId,1);
+  });
+
+  let $thumbsDownBtnNode = $message.find('#thumbsDownBtn');
+  $thumbsDownBtnNode.click(() => {
+    rateMessage(visualId, -1);
+  });
+
+  let $retryBtnNode = $message.find('#retryBtn');
+  $retryBtnNode.click(() => {
+    retryTurn(visualId);
+  });
+
+  $closeBtnNode.hide();
+  $thumbsUpBtnNode.hide();
+  $thumbsDownBtnNode.hide();
+  $retryBtnNode.hide();
+  let $x = $message.find('#noticeContainer');
+  $message.find('#noticeContainer').hide();
+  $message.find('#dots').hide();
+
+  if (hasContent) {
+    let $messageContent = $message.find('#messageBody');
+
+    if (participant.isUser()) {
+      $messageContent.text(content);
+    } else {
+      let htmlContent = markdown2html(content);
+      $messageContent.html(htmlContent);
+      $messageContent.data('md', content);
+      colorizeCodeblocks($messageContent.get(0));
+    }
+  } 
+
+  messageList.push($message.get(0));
+
+  ChatApp.$newMessageIndicator.before($message);
+
+  let $accordian =  $message.find("#referencesContainer"); 
+  $accordian
+    .accordion({
+        active: false,
+        collapsible: true,
+        icons: {
+          header: "ui-icon-triangle-1-s",
+          activeHeader: "ui-icon-triangle-1-s"
+        }
+      })
+    .hide();
+
+  if (ChatApp.autoscrollEnabled) scrollToBottom();
+
+  return $message.get(0);
+}
+
+function getMessageFromVisualId(visualId) {
+  return getMessage(visualId2HTMLId(visualId, true));
+}
+
+function getMessage(htmlId) {
+  let message = ChatApp.messageContainer.querySelector(htmlId);
+  return message;
+}
+
+// Only called for AI responses to append to current response message content.
+// Assumes all content is markdown formatted.
+function updateMessage(visualId, markdownContent, shouldAppend) {
+  let mdContent = (typeof markdownContent === 'string') ? markdownContent : "";
+
+  let message = getMessageFromVisualId(visualId);
+  let $messageContent = $(message).find('#messageBody');
+  let md = shouldAppend ? $messageContent.data('md') : null;
+  md = md ? md + mdContent : mdContent;
+  $messageContent.data('md', md);
+  // ChatApp.worker.postMessage({visualId: visualId, content: md});
+  let htmlContent = markdown2html(md);
+  $messageContent.html(htmlContent);
+  colorizeCodeblocks($messageContent.get(0));
+
+  if (ChatApp.autoscrollEnabled) scrollToBottom();
+}
+
+// used by worker architecture
+//
+// function updateProcessedMessage(visualId, md) {
+//   let message = getMessageFromVisualId(visualId);
+//   let $messageContent = $(message).find('#messageBody');
+//   let htmlContent = markdown2html(md);
+//   $messageContent.html(htmlContent);
+//   colorizeCodeblocks($messageContent.get(0));
+
+//   scrollToBottom();
+// }
+
+function clearMessage(visualId, allContainers) {
+  let message = getMessageFromVisualId(visualId);
+  let messageContent = message.querySelector('#messageBody');
+  messageContent.dataset.md = null;
+  messageContent.innerHTML = null;
+
+  if (allContainers) {
+   let messageHeader = message.querySelector('#messageHeader');
+   let noticeContainer = messageHeader.querySelector('#noticeContainer');
+   noticeContainer.innerHTML = null;
+   noticeContainer.style.display = 'none';
+
+   let messageFooter = message.querySelector('#messageFooter');
+   noticeContainer = messageFooter.querySelector('#noticeContainer');
+   noticeContainer.innerHTML = null;
+   noticeContainer.style.display = 'none';
+  }
+
+  if (message.dataset.participant === Participant.SYSTEM_ROLE_ID) {
+    updateMessageButtons(visualId, 0, 0, 0);
+  } else {
+    updateMessageButtons(visualId, 1, 0, 0);
+  }
+  
+  scrollToBottom();
+}
+
+function addMessageLink(visualId, linkText, linkAction) {
+  if (!linkText || !linkAction) return;
+
+  let message = getMessageFromVisualId(visualId);
+  let messageContent = message.querySelector('#messageBody');
+  let anchorDiv = document.createElement('div');
+  let anchor = document.createElement('a');
+  anchor.innerText = linkText;
+  anchor.addEventListener('click', window[linkAction]);
+  anchorDiv.appendChild(anchor);
+  messageContent.appendChild(anchorDiv);
+  
+  if (ChatApp.autoscrollEnabled) scrollToBottom();
+}
+
+function addMessageCodeReferences(visualId, conversationId, turnId, annotationCnt) {
+  let $link = $('<a>')
+    .attr('href', '#')
+    .text('view details')
+    .on('click', function(e) {
+      e.preventDefault();         // prevent the default anchor behavior
+      processShowCodeReferencesRequest(conversationId, turnId)
+    });
+  
+  let $message = $(getMessageFromVisualId(visualId));
+  let $noticeContainer = $message.find('#noticeContainer');
+  let matchWord = annotationCnt > 1 ? "matches" : "match";
+  let $codeRef = $('<div/>', {
+      id: 'codeRef',
+      text: annotationCnt + " public code " +  matchWord + " found - "
+    }).css({
+      "margin-top": '5px',
+      "cursor": 'pointer'
+    });
+  $codeRef.append($link);
+  $noticeContainer.before($codeRef);
+}
+
+// function appendMessage(visualId, markdownContent) {
+//   updateMessage(visualId, markdownContent, true);
+
+  // if (!markdownContent || markdownContent.length == 0) return;
+
+  // let message = getMessageFromVisualId(visualId);
+  // let messageContent = message.querySelector('#messageBodyP');
+  // let md = messageContent.dataset.md;
+  // md = md ? md + markdownContent : markdownContent;
+  // let htmlContent = markdown2html(md);
+  // messageContent.dataset.md = md;
+  // messageContent.innerHTML = htmlContent;
+  // colorizeCodeblocks(messageContent);
+
+  // if (message.dataset.participant === 'agent') {
+  //   updateMessageButtons(visualId, false, true, true);
+  // } else {
+  //   updateMessageButtons(visualId, true, false, false);
+  // }
+  
+  // scrollToBottom();
+// }
+
+function setMessageCompleted(visualId) {
+  showMessageActive(visualId, false);
+}
+
+function deleteMessage(visualId) {
+  let message = getMessageFromVisualId(visualId);
+  let messages = [message];
+  if (!isSystemMessage(message)) {
+    let message2 = nextMessage(message);
+    if (message2) messages.push(message2);
+  }
+  messages.forEach( (message) => {
+    ChatApp.messageContainer.removeChild(message);
+    removeFromMessageList(message);
+  });
+}
+
+function deleteAllMessages() {
+   //ChatApp.messageContainer.innerHTML = '';
+   $(ChatApp.messageContainer).find(".message").remove();
+   messageList = [];
+}
+
+function showMessageAgent(visualId, agentId, agentName, agentAvatarUrl) {
+  if (ChatApp.debug) console.log('showMessageAgent:', agentId, agentName, agentAvatarUrl);
+
+  let $message = $(getMessageFromVisualId(visualId));
+
+  const $messageHeaderInfo = $message.find('#messageHeaderInfo');
+
+  const $participant1 = $messageHeaderInfo.find('#participantsContainer #participant1');
+  let $nameNode = $participant1.find('#name');
+  $nameNode.text("using");
+
+  const $participant2 = $messageHeaderInfo.find('#participantsContainer #participant2');
+  const $avatarNode = $participant2.find('#avatar');
+  $avatarNode.attr('src', agentAvatarUrl);  //'https://github.com/' + userName + '.png';
+  $nameNode = $participant2.find('#name');
+  $nameNode.text(agentName);
+
+  $participant2.show();
+}
+
+function rateMessage(visualId, rating) {
+  processMessageRatingRequest(visualId, rating);
+}
+
+function retryTurn(visualId) {
+  processRetryTurnRequest(visualId);
+}
+
+function isSystemMessage(message) {
+  return message.dataset.participant === Participant.SYSTEM_ROLE_ID;
+}
+
+function updateMessageButtons(visualId, closeBtnState, thumbsUpBtnState, 
+      thumbsDownBtnState, retryBtnState) {
+
+  let message = getMessageFromVisualId(visualId);
+  if (!message) return;
+  
+  let $closeBtnNode = $(message).find('#closeBtn');
+  let $thumbsUpBtnNode = $(message).find('#thumbsUpBtn');
+  let $thumbsDownBtnNode = $(message).find('#thumbsDownBtn');
+  let $retryBtnNode = $(message).find('#retryBtn');
+
+  if (retryBtnState !== -1) {
+    if (retryBtnState) {
+      $retryBtnNode.show();
+    } else {
+      $retryBtnNode.hide();
+    }
+  }
+
+  if (closeBtnState !== -1) {
+    if (closeBtnState) {
+      $closeBtnNode.show();
+    } else {
+      $closeBtnNode.hide();
+    }
+  }
+
+  if (thumbsUpBtnState !== -1) {
+    let $inode;
+    if (thumbsUpBtnState) {
+      $thumbsUpBtnNode.show();
+      $inode = $thumbsUpBtnNode.find('i');
+      if (thumbsUpBtnState === 1) {
+        $inode.removeClass('fa-solid').addClass('fa-thin');
+      } else {
+        $inode.removeClass('fa-thin').addClass('fa-solid');
+      }
+    } else {
+      $thumbsUpBtnNode.hide();
+    }
+  }
+
+  if (thumbsDownBtnState !== -1) {
+    if (thumbsDownBtnState) {
+      $thumbsDownBtnNode.show();
+      $inode = $thumbsDownBtnNode.find('i');
+      if (thumbsDownBtnState === 1) {
+        $inode.removeClass('fa-solid').addClass('fa-thin');
+      } else {
+        $inode.removeClass('fa-thin').addClass('fa-solid');
+      }
+    } else {
+      $thumbsDownBtnNode.hide();
+    }
+  }
+}
+
+function showMessageActive(visualIdOrMessage, aBool) {
+  let message = (typeof visualIdOrMessage === 'string') ? 
+        getMessageFromVisualId(visualIdOrMessage) :
+        visualIdOrMessage;
+  let dots = $(message).find('#dots');
+  if (aBool) {
+    $(dots).show();
+  } else {
+    $(dots).hide();
+  }
+}
+
+function showMessageNotice(visualId, noticeType, text, location, fnName) {
+  let hasText = typeof text === 'string' && text.length > 0 && text != 'null';
+
+  let noticeTemplate = document.getElementById('notice');
+  let notice = noticeTemplate.cloneNode(true);
+  notice.id = visualId2HTMLId(visualId) + '-' + Date.now();
+
+  let imageClass;
+  switch (noticeType) {
+    case 'INFO':
+        imageClass = 'fa-circle-info';
+        break;
+    case 'ERROR':
+      imageClass = 'fa-circle-info';
+      $(notice).addClass('noticeError');
+      break;
+    case 'NORMAL':
+    default:
+        imageClass = 'fa-sparkles';
+  }
+
+  let noticeImage = notice.querySelector('#noticeImage');
+  noticeImage.classList.add(imageClass);
+
+  let noticeText = notice.querySelector('#noticeText');
+  noticeText.textContent = hasText ? text : '';
+  if (typeof fnName === 'string' && fnName.length > 0 && fnName != 'null') {
+    noticeText.addEventListener('click', function() { doit(fnName); } );
+    noticeText.style.cursor = 'pointer';
+  }
+
+  let message = getMessageFromVisualId(visualId);
+  if (!location || location === 'FOOTER') {
+    let messageFooter = message.querySelector('#messageFooter');
+    let noticeContainer = messageFooter.querySelector('#noticeContainer');
+    noticeContainer.appendChild(notice);
+    noticeContainer.style.display = 'block';
+  } else if (location === 'HEADER') {
+    let messageHeader = message.querySelector('#messageHeader');
+    let noticeContainer = messageHeader.querySelector('#noticeContainer');
+    noticeContainer.appendChild(notice);
+    noticeContainer.style.display = 'block';
+  }
+
+  if (ChatApp.autoscrollEnabled) scrollToBottom();
+}
+
+// ref: {filename: String, languageId: String}
+function setMessageReferences(visualId, references) {
+  if (!references || references.length == 0) return;
+
+  let message = $(getMessageFromVisualId(visualId));
+  let referencesContainer = $(message).find('#referencesContainer');
+  let referencesHeader = $(referencesContainer).find('#referencesHeader');
+  $(referencesHeader).text(`Using ${references.length} Reference${references.length > 1 ? "s" : ""}`);
+
+  let referencesListUL = $(referencesContainer).find('ul');
+  references.forEach( (ref) => {
+    // <li><span class="ui-icon ui-icon-document" style="display:inline-block;"></span> Name 1</li>
+    // Create the <span> element with the class and style
+    let $span = $('<span></span>', {
+      class: 'ui-icon ui-icon-document',
+      css: {
+          display: 'inline-block'
+      }
+    });
+  
+    // Create the <li> element and append the <span> and text to it
+    let $li = $('<li></li>').append($span, ref);
+  
+    // Append the <li> to the <ul> with id="myList"
+    $(referencesListUL).append($li);
+  });
+
+  $(referencesContainer).show();
+  $(referencesContainer).accordion('refresh');
+}
+
+function showUnauthorizedAgentMsg(visualId, slug, name, avatarUrl, actionUrl) {
+  if (ChatApp.debug) console.log('showUnauthorizedAgentMsg:', slug, name, avatarUrl);
+
+  let $unauthorizedAgentTemplate = $('#unauthorizedAgent');
+  let $unauthorizedAgent = $unauthorizedAgentTemplate.clone();
+  $unauthorizedAgent.attr('id', visualId2HTMLId(visualId) + '-' + Date.now());
+  $unauthorizedAgent.show();
+
+  let $img = $unauthorizedAgent.find('#unauthorizedImg');
+  $img.attr('src', avatarUrl);
+
+  let $line1 = $unauthorizedAgent.find('#unauthorizedLine1');
+  $line1.text(name);
+
+  let $line2 = $unauthorizedAgent.find('#unauthorizedLine2');
+  $line2.text('Use of @' + slug + ' requires authorization.');
+  
+  let $btn = $unauthorizedAgent.find('#unauthorizedBtn');
+  $btn.click( () => {
+    if (ChatApp.debug) console.log('Authorize clicked');
+    processOpenLinkRequest(actionUrl);
+  });
+
+  let $message = $(getMessageFromVisualId(visualId));
+  let $messageHeader = $message.find('#messageHeader');
+  let $noticeContainer = $messageHeader.find('#noticeContainer');
+  $noticeContainer.append($unauthorizedAgent);
+  $noticeContainer.show();
+
+  scrollToBottom();
+}
+
+function showNotification(noticeType, text) {
+  let hasText = typeof text === 'string' && text.length > 0 && text != 'null';
+ 
+  let imageClass;
+  let background;
+  switch (noticeType) {
+    case 'INFO':
+        imageClass = 'fa-circle-info';
+        background = '#74C0FC';
+        break;
+    case 'ERROR':
+      imageClass = 'error';
+      background = 'red';
+      break;
+    case 'NORMAL':
+    default:
+        imageClass = 'fa-sparkles';
+        background = 'inherit';
+  }
+
+  let $messageInputInfoImage = $('#messageInputInfoImage');
+  $messageInputInfoImage.addClass(imageClass);
+ $("#messageInputInfo").css("display", "flex");
+
+  let $messageInputInfoText = $('#messageInputInfoText');
+  $messageInputInfoText.text(hasText ? text : '');
+}
+
+function hideNotification() {
+  $("#messageInputInfo").css("display", "none");
+}
+
+function showConversationMgmtPage(data) {
+  showChatMgmtPage();
+  
+  // remove conversationList elements
+  let $conversationList = $("#conversationList");
+  $conversationList.empty();
+
+  let $conversationTemplate = $("#conversation");
+  let conversationRefs = JSON.parse(data);
+  conversationRefs.forEach( ref => {
+    let $conversation = $conversationTemplate.clone();
+    $conversation.attr('id', ref.id);
+    $conversation.click( function() {
+      processShowConversationRequest(ref.id);
+    });
+
+    $("#chatMgmtTitle").text('CONVERSATIONS(' + conversationRefs.length + ')');
+
+    let $conversationName = $conversation.find('#conversationName');
+    $conversationName.text(ref.name);
+    let $conversationDate = $conversation.find('#conversationDate');
+    $conversationDate.text(ref.createDate);
+
+    if (ref.isMRU) {
+      $conversation.addClass('mru');
+      let $conversationImage = $conversation.find('i');
+      $conversationImage.removeClass('fa-regular');
+      $conversationImage.addClass('fa-solid');
+    }
+
+    let $conversationDeleteBtn = $conversation.find('#conversationDeleteBtn');
+    $conversationDeleteBtn.click( function(event) {
+      event.stopPropagation();
+      processDeleteConversationRequest(ref.id);
+      $conversation.remove();
+
+      $("#chatMgmtTitle").text('CONVERSATIONS(' + $conversationList.children().length + ')');
+
+      if ($conversationList.children().length === 0) {
+        $conversationList.append(
+          '<div><i>No conversations available</i></div>');
+      }
+    });
+
+    $conversationList.append($conversation);
+  });
+}
+
+function createConversationRef() {
+}
+
+function doit(fnWithArgs) {
+  eval(fnWithArgs);
+}
+
+function doit1(fnName,...args) {
+  window[fnName](args);
+}
+
+function isChatPaneVisible() {
+  return $("#chatPage").is(":visible");
+}
+
+function setupDnd() {
+  let $doc = $(document);
+  let $body = $('body');
+
+  // 1) Prevent default on dragover/dragenter so drops are allowed:
+  $body.on('dragover dragenter', function(evt) {
+    evt.preventDefault();
+    if (isChatPaneVisible()) {
+      evt.originalEvent.dataTransfer.dropEffect = 'copy';
+      //$body.addClass('drag-over');
+    } else {
+      evt.originalEvent.dataTransfer.dropEffect = 'none';
+    }
+  });
+
+  // 2) Clean up outline when leaving:
+  $body.on('dragleave', function(evt) {
+    //$body.removeClass('drag-over');
+  });
+
+  // 3) Handle the drop anywhere:
+  $body.on('drop', function(evt) {
+    evt.preventDefault();
+    if (!isChatPaneVisible()) return;
+    //$body.removeClass('drag-over');
+
+    let droppedFiles = evt.originalEvent.dataTransfer.files;
+    if (!droppedFiles || droppedFiles.length === 0) return;
+
+    if (ChatApp.debug) {
+      for (let i = 0; i < droppedFiles.length; i++) {
+        const file = droppedFiles[i];
+        console.log('Dropped URI[' + i + ']: ' + uri + ' -> ' + file.name);
+      };
+    }
+
+    processAddSelectionToCtxRequest("droppedFilesHere");
+  });
+}
+
+function buttonClicked(button) {
+  // Temporarily change the icon color when clicked
+  const icon = button.querySelector('i');
+  icon.style.color = 'green'; // Temporary color
+
+  // Revert the icon color after a short delay
+  setTimeout(() => {
+      icon.style.color = ''; // Revert to original color
+  }, 100); // Adjust delay as needed
+}
+
+// API Services and interface
+
+function handleCreateWSClient() {
+  if (ChatApp.debug) console.log("handleCreateWSClient");
+  ChatApp.ws = new WebSocket(ChatApp.wsUrl);
+  ChatApp.ws.onmessage = handleWSCommand;
+  ChatApp.ws.onclose = handleWSClose;
+  setTimeout(() => {
+    if (!ChatApp.ws && ChatApp.ws.readyState !== WebSocket.OPEN) {
+      if (ChatApp.debug) console.log("handleCreateWSClient - restart");
+      handleCreateWSClient();
+    }
+  }, 1000);
+}
+
+function handleWSCommand(event) {
+  if (!event ||!event.data) return;
+  let jsonString = event.data;
+  if (ChatApp.debug) console.log("handleWSCommand: " + jsonString);
+  let cmdMsg = JSON.parse(jsonString);
+  try {
+    eval(cmdMsg.command);
+  } catch (err) {
+    console.error('Error processing command: ', err);
+  }
+}
+
+function handleWSClose(event) {
+  if (ChatApp.debug) console.log("handleWSClose: " + event);
+  setTimeout(() => {
+    handleCreateWSClient();
+  }, 1000);
+}
+
+function processSignOnRequest(...args) {
+  sendCmd('processSignOnRequest', args);
+}
+
+function processMessageInputRequest(...args) {
+  sendCmd('processMessageInputRequest', args);
+}
+
+function processMessageInputCancelRequest(...args) {
+  sendCmd('processMessageInputCancelRequest', args);
+}
+
+function processRetryTurnRequest(...args) {
+  sendCmd('processRetryTurnRequest', args);
+}
+
+function processEnableCurrentFileContextRequest(...args) {
+  sendCmd('processEnableCurrentFileContextRequest', args);
+}
+
+function processTurnFollowupRequest(...args) {
+  sendCmd('processTurnFollowupRequest', args);
+}
+
+function processMessageRatingRequest(...args) {
+  sendCmd('processMessageRatingRequest', args);
+}
+
+function processMessageDeleteTurnRequest(...args) {
+  sendCmd('processMessageDeleteTurnRequest', args);
+}
+
+function processMessageDeleteAllRequest(...args) {
+  sendCmd('processMessageDeleteAllRequest', args);
+}
+
+function processMessageAcceptCodeblockRequest(...args) {
+  sendCmd('processMessageAcceptCodeblockRequest', args);
+}
+
+function processMessageCopyCodeblockRequest(...args) {
+  sendCmd('processMessageCopyCodeblockRequest', args);
+}
+
+function processSelectReferencesRequest(...args) {
+  sendCmd('processSelectReferencesRequest', args);
+}
+
+function processOpenEditorRequest(...args) {
+  sendCmd('processOpenEditorRequest', args);
+}
+
+function processRemoveReferenceRequest(...args) {
+  sendCmd('processRemoveReferenceRequest', args);
+}
+
+function processShowCodeReferencesRequest(...args) {
+  sendCmd('processShowCodeReferencesRequest', args);
+}
+
+function processNewConversationRequest(...args) {
+  sendCmd('processNewConversationRequest', []);
+}
+
+function processShowChatPageMenuRequest(...args) {
+  sendCmd('processShowChatPageMenuRequest', args);
+}
+
+function processShowChatPageRequest(...args) {
+  sendCmd('processShowChatPageRequest', []);
+}
+
+function processShowConversationMgmtPageRequest(...args) {
+  sendCmd('processShowConversationMgmtPageRequest', []);
+}
+
+function processShowConversationMgmtPageMenuRequest(...args) {
+  sendCmd('processShowConvesationMgmtPageMenuRequest', args);
+}
+
+function processDeleteAllConversationsRequest(...args) {
+  sendCmd('processDeleteAllConversationsRequest', []);
+}
+
+function processShowConversationRequest(...args) {
+  sendCmd('processShowConversationRequest', args);
+}
+
+function processDeleteConversationRequest(...args) {
+  sendCmd('processDeleteConversationRequest', args);
+}
+
+function processOpenLinkRequest(...args) {
+  sendCmd('processOpenLinkRequest', args);
+}
+
+function processSetModelRequest(...args) {
+  sendCmd('processSetModelRequest', args);
+}
+
+function processAddSelectionToCtxRequest(...args) {
+  sendCmd('processAddSelectionToCtxRequest', args);
+}
+
+function processClearConversationRequest(...args) {
+  sendCmd('processClearConversationRequest', []);
+}
+
+function processClearPromptHistoryRequest(...args) {
+  sendCmd('processClearPromptHistoryRequest', []);
+}
+
+function sendCmd(cmdName, args) {
+  let cmd = {
+    command: cmdName,
+    arguments: args
+  };
+
+  let cmdString = JSON.stringify(cmd);
+
+  if (ChatApp.debug) console.log('sendCmd: ', cmdString);
+
+  let url = window.location.origin + '/chat/api/command' + ChatApp.sessionParam;
+  fetch(url, { 
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: cmdString
+  })
+  .then(response => response.json())  // Assuming the server responds with JSON
+  .then(data => { if (ChatApp.debug) console.log('Success:', data) })
+  .catch((error) => console.error('Error:', error)); //todo: send this info to the plugin for processing
+}
+
+// function debounce(func, wait, immediate) {
+//   let timeout;
+//   return function() {
+//     let context = this, args = arguments;
+//     let later = function() {
+//       timeout = null;
+//       if (!immediate) {
+//         func.apply(context, args);
+//       }
+//     };
+//     let callNow = immediate && !timeout;
+//     clearTimeout(timeout);
+//     timeout = setTimeout(later, wait);
+//     if (callNow) {
+//       func.apply(context, args);
+//     }
+//   };
+// }
+
+// $(document).ready(setupChatApp);
+document.addEventListener('DOMContentLoaded', initializeChatApp);
