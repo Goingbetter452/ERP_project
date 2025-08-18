@@ -6,7 +6,7 @@
 body {
     font-family: 'Malgun Gothic', sans-serif;
     margin: 0;
-    padding: 0;
+    padding: 60px 0 0 0; /* Add padding-top to account for fixed header */
     background-color: #f8f9fa;
 }
 
@@ -16,9 +16,13 @@ body {
 header {
     width: 100%;
     background-color: #ffffff;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 2px solid #e0e0e0;
     padding: 0 20px;
     box-sizing: border-box;
+    position: fixed;
+    top: 0;
+    z-index: 1000; /* Ensure header is on top of other content */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* 헤더에 그림자 추가 */
 }
 
 /* 네비게이션 메뉴 컨테이너 */
@@ -45,6 +49,7 @@ nav ul.main-menu > li > a {
     font-size: 16px;
     font-weight: 500;
     line-height: 60px;
+    font-family: 'Malgun Gothic', '맑은 고딕', 'Nanum Gothic', '나눔고딕', sans-serif; /* 한글 폰트 명시적 설정 */
     transition: color 0.2s;
 }
 

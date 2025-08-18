@@ -621,3 +621,4 @@ Caused by: java.lang.NullPointerException: null
 	at org.eclipse.jgit.util.FS$FileStoreAttributes.lambda$2(FS.java:434)
 	at java.base/java.util.concurrent.CompletableFuture$AsyncSupply.run(CompletableFuture.java:1768)
 	... 6 common frames omitted
+2025-08-19 00:07:44,043 [Worker-4: Loading available Gradle versions] INFO  o.e.b.c.i.u.g.PublishedGradleVersions - Gradle version information cache is up-to-date. Trying to read.

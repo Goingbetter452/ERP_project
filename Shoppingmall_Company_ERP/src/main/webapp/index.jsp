@@ -34,7 +34,7 @@
         <div class="feature-card">
             <h3>👥 사용자 관리</h3>
             <p>고객 정보 및 관리자 계정 관리</p>
-            <a href="#" class="btn">사용자 관리</a>
+            <a href="employee_list.jsp" class="btn">사용자 관리</a>
         </div>
         
         <div class="feature-card">

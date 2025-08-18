@@ -13,8 +13,10 @@
 			<attribute name="module" value="true"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="lib" path="C:/apache-tomcat-10.1.43/lib/annotations-api.jar"/>
-	<classpathentry kind="lib" path="C:/apache-tomcat-10.1.43/lib/el-api.jar"/>
-	<classpathentry kind="lib" path="C:/apache-tomcat-10.1.43/lib/jsp-api.jar"/>
+	<classpathentry kind="lib" path="${TOMCAT_HOME}/lib/annotations-api.jar"/>
+	<classpathentry kind="lib" path="${TOMCAT_HOME}/lib/el-api.jar"/>
+	<classpathentry kind="lib" path="${TOMCAT_HOME}/lib/jsp-api.jar"/>
+	<classpathentry kind="lib" path="src/main/webapp/WEB-INF/lib/ojdbc8-21.9.0.0.jar"/>
 	<classpathentry kind="output" path="build/classes"/>
 </classpath>
+

@@ -49,4 +49,23 @@ public class DBManager {
          e.printStackTrace();
       }
    }
+
+   /**
+	* DB 연결을 종료하는 메서드입니다.
+	* PreparedStatement, Connection 객체를 순서대로 닫습니다.
+	* @param pstmt PreparedStatement 객체
+	* @param conn Connection 객체
+	*/
+   public static void close(PreparedStatement pstmt, Connection conn) {
+      try {
+         if (pstmt != null) pstmt.close();
+      } catch (Exception e) {
+         e.printStackTrace();
+      }
+      try {
+         if (conn != null) conn.close();
+      } catch (Exception e) {
+         e.printStackTrace();
+      }
+   }
 }
