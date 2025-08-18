@@ -18,3 +18,6 @@ build/
 # Libraries
 lib/
 *.jar
+
+# 이클립스 관련 파일
+.metadata/
