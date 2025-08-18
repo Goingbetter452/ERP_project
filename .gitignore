@@ -1,0 +1,10 @@
+# 이클립스 관련 파일
+.metadata/
+.project
+.classpath
+.settings/
+
+# 빌드 관련 폴더
+target/
+bin/
+build/
