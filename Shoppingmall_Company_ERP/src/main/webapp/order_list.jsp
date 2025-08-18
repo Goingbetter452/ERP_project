@@ -1,7 +1,16 @@
 <%@ page import="java.sql.*" %>
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
 <%
-ResultSet rs=()
+ResultSet rs = (ResultSet) request.getAttribute("orderList");
+
+// 고객 목록 조회
+Connection conn = com.company1.DBManager.getDBConnection();
+PreparedStatement customerStmt = conn.prepareStatement("SELECT cid, cname FROM customers");
+ResultSet customers = customerStmt.executeQuery();
+
+// 상품 목록 조회
+PreparedStatement productStmt = conn.prepareStatement("SELECT pid, pname FROM products");
+ResultSet products = productStmt.executeQuery();
 %>
 
 <!DOCTYPE html>
